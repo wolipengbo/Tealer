@@ -15,22 +15,33 @@ import android.widget.Toast;
 
 import com.hyphenate.EMCallBack;
 import com.hyphenate.chat.EMClient;
+import com.hyphenate.chat.EMGroupManager;
+import com.hyphenate.exceptions.HyphenateException;
+import com.hyphenate.util.HanziToPinyin;
+import com.tealer.app.Constant;
 import com.tealer.app.HXSDKHelper;
 import com.tealer.app.R;
 import com.tealer.app.TealerApplication;
 import com.tealer.app.activity.BaseActivity;
+import com.tealer.app.db.UserDao;
 import com.tealer.app.domain.User;
+import com.tealer.app.engine.GetFriendsListEngine;
 import com.tealer.app.engine.LoginEngine;
 import com.tealer.app.http.HttpRequestCallBack;
 import com.tealer.app.utils.EncodeUtils;
+import com.tealer.app.utils.PreferenceManager;
 
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.xutils.view.annotation.ContentView;
 import org.xutils.view.annotation.ViewInject;
+
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Author：pengbo on 2016/3/13 15:43
@@ -255,75 +266,89 @@ public class LoginActivity extends BaseActivity {
 
     }
 
-//    private void processContactsAndGroups(final JSONObject json) {
-//        // demo中简单的处理成每次登陆都去获取好友username，开发者自己根据情况而定
-//
-//        // try {
-//        // List<String> usernames = EMContactManager.getInstance()
-//        // .getContactUserNames();
-//        // if (usernames != null && usernames.size() > 0) {
-//        // String totaluser = usernames.get(0);
-//        // for (int i = 1; i < usernames.size(); i++) {
-//        // final String split = "66split88";
-//        // totaluser += split + usernames.get(i);
-//        // }
-//        // totaluser = totaluser
-//        // .replace(Constant.NEW_FRIENDS_USERNAME, "");
-//        // totaluser = totaluser.replace(Constant.GROUP_USERNAME, "");
-//        // Log.e("totaluser---->>>>>",totaluser);
-//        Map<String, String> map = new HashMap<String, String>();
-//
-//        // map.put("uids", totaluser);
-//        map.put("hxid", MYApplication.getInstance().getUserName());
-//        LoadDataFromServer task = new LoadDataFromServer(LoginActivity.this,
-//                Constant.URL_FriendList, map);
-//
-//        task.getData(new DataCallBack() {
-//
-//            @Override
-//            public void onDataCallBack(JSONObject data) {
-//                try {
-//                    int code = data.getInteger("code");
-//                    if (code == 1000) {
-//                        JSONArray josnArray = data.getJSONArray("friends");
-//                        // 己的信息
-//                        saveMyInfo(json);
-//
-//                        saveFriends(josnArray);
-//
-//                    }
-//                    // else if (code == 2) {
-//                    // dialog.dismiss();
-//                    // Toast.makeText(LoginActivity.this,
-//                    // "获取好友列表失败,请重试...", Toast.LENGTH_SHORT)
-//                    // .show();
-//                    // }
-//                    else {
-//                        dialog.dismiss();
-//                        Toast.makeText(LoginActivity.this, "服务器繁忙请重试...",
-//                                Toast.LENGTH_SHORT).show();
-//                    }
-//
-//                } catch (JSONException e) {
-//                    dialog.dismiss();
-//                    Toast.makeText(LoginActivity.this, "数据解析错误...",
-//                            Toast.LENGTH_SHORT).show();
-//                    e.printStackTrace();
-//                }
-//            }
-//        });
-//        // } else {
-//        // // 己的信息
-//        // saveMyInfo(json);
-//        //
-//        // saveFriends(null);
-//        // }
-//        // } catch (EaseMobException e1) {
-//        // // TODO Auto-generated catch block
-//        // e1.printStackTrace();
-//        // }
-//
-//    }
+    private void processContactsAndGroups(final JSONObject json) {
+        // demo中简单的处理成每次登陆都去获取好友username，开发者自己根据情况而定
+
+        // try {
+        // List<String> usernames = EMContactManager.getInstance()
+        // .getContactUserNames();
+        // if (usernames != null && usernames.size() > 0) {
+        // String totaluser = usernames.get(0);
+        // for (int i = 1; i < usernames.size(); i++) {
+        // final String split = "66split88";
+        // totaluser += split + usernames.get(i);
+        // }
+        // totaluser = totaluser
+        // .replace(Constant.NEW_FRIENDS_USERNAME, "");
+        // totaluser = totaluser.replace(Constant.GROUP_USERNAME, "");
+        // Log.e("totaluser---->>>>>",totaluser);
+        Map<String, Object> map = new HashMap<String, Object>();
+
+        // map.put("uids", totaluser);
+        map.put("hxid", HXSDKHelper.getInstance().getCurrentUsernName());
+        GetFriendsListEngine.getResult(new HttpRequestCallBack(){
+            @Override
+            public void onStarted() {
+                super.onStarted();
+            }
+
+            @Override
+            public void onSuccess(String result) {
+                super.onSuccess(result);
+                String strJson=EncodeUtils.removeBOM(result);
+                JSONObject data=LoginEngine.parseResult(strJson,LoginActivity.this);
+
+                try {
+                    int code = data.getInt("code");
+                    if (code == 1000) {
+                        JSONArray josnArray = data.getJSONArray("friends");
+                        // 己的信息
+                        saveMyInfo(json);
+
+                        saveFriends(josnArray);
+
+                    }
+                    // else if (code == 2) {
+                    // dialog.dismiss();
+                    // Toast.makeText(LoginActivity.this,
+                    // "获取好友列表失败,请重试...", Toast.LENGTH_SHORT)
+                    // .show();
+                    // }
+                    else {
+                        dialog.dismiss();
+                        Toast.makeText(LoginActivity.this, "服务器繁忙请重试...",
+                                Toast.LENGTH_SHORT).show();
+                    }
+
+                } catch (JSONException e) {
+                    dialog.dismiss();
+                    Toast.makeText(LoginActivity.this, "数据解析错误...",
+                            Toast.LENGTH_SHORT).show();
+                    e.printStackTrace();
+                }
+
+
+
+
+            }
+
+            @Override
+            public void onError(Throwable ex, boolean isOnCallback) {
+                super.onError(ex, isOnCallback);
+            }
+        },map,LoginActivity.this);
+        // } else {
+        // // 己的信息
+        // saveMyInfo(json);
+        //
+        // saveFriends(null);
+        // }
+        // } catch (EaseMobException e1) {
+        // // TODO Auto-generated catch block
+        // e1.printStackTrace();
+        // }
+
+    }
 
     /**
      * 设置hearder属性，方便通讯中对联系人按header分类显示，以及通过右侧ABCD...字母栏快速定位联系人
@@ -331,181 +356,169 @@ public class LoginActivity extends BaseActivity {
      * @param username
      * @param user
      */
-//    @SuppressLint("DefaultLocale")
-//    protected void setUserHearder(String username, User user) {
-//        String headerName = null;
-//        if (!TextUtils.isEmpty(user.getNick())) {
-//            headerName = user.getNick();
-//        } else {
-//            headerName = user.getUsername();
-//        }
-//        headerName = headerName.trim();
-//        if (username.equals(Constant.NEW_FRIENDS_USERNAME)) {
-//            user.setHeader("");
-//        } else if (Character.isDigit(headerName.charAt(0))) {
-//            user.setHeader("#");
-//        } else {
-//            user.setHeader(HanziToPinyin.getInstance()
-//                    .get(headerName.substring(0, 1)).get(0).target.substring(0,
-//                            1).toUpperCase());
-//            char header = user.getHeader().toLowerCase().charAt(0);
-//            if (header < 'a' || header > 'z') {
-//                user.setHeader("#");
-//            }
-//        }
-//    }
+    @SuppressLint("DefaultLocale")
+    protected void setUserHearder(String username, User user) {
+        String headerName = null;
+        if (!TextUtils.isEmpty(user.getNick())) {
+            headerName = user.getNick();
+        } else {
+            headerName = user.getUsername();
+        }
+        headerName = headerName.trim();
+        if (username.equals(Constant.NEW_FRIENDS_USERNAME)) {
+            user.setHeader("");
+        } else if (Character.isDigit(headerName.charAt(0))) {
+            user.setHeader("#");
+        } else {
+            user.setHeader(HanziToPinyin.getInstance()
+                    .get(headerName.substring(0, 1)).get(0).target.substring(0,
+                            1).toUpperCase());
+            char header = user.getHeader().toLowerCase().charAt(0);
+            if (header < 'a' || header > 'z') {
+                user.setHeader("#");
+            }
+        }
+    }
 
-//    private void saveMyInfo(JSONObject json) {
-//
+    private void saveMyInfo(JSONObject json) {
+
+        try {
+            String hxid = json.getString("hxid");
+            String fxid = json.getString("fxid");
+            String nick = json.getString("nick");
+            String avatar = json.getString("avatar");
+            String password = json.getString("password");
+            String sex = json.getString("sex");
+            String region = json.getString("region");
+            String sign = json.getString("sign");
+            String tel = json.getString("tel");
+            String money  = json.getString("money");
+            PreferenceManager.getInstance().setCurrentUserName(hxid);
+            PreferenceManager.getInstance().setString(PreferenceManager.SHARED_KEY_CURRENTUSER_FXID, fxid);
+            PreferenceManager.getInstance().setCurrentUserNick(nick);
+            PreferenceManager.getInstance().setCurrentUserAvatar(avatar);
+            PreferenceManager.getInstance().setString(PreferenceManager.SHARED_KEY_CURRENTUSER_PASSWORD, password);
+            PreferenceManager.getInstance().setString(PreferenceManager.SHARED_KEY_CURRENTUSER_SEX,sex);
+            PreferenceManager.getInstance().setString(PreferenceManager.SHARED_KEY_CURRENTUSER_REGION,region);
+            PreferenceManager.getInstance().setString(PreferenceManager.SHARED_KEY_CURRENTUSER_SIGN,sign);
+            PreferenceManager.getInstance().setString(PreferenceManager.SHARED_KEY_CURRENTUSER_TEL,tel);
+            PreferenceManager.getInstance().setString(PreferenceManager.SHARED_KEY_CURRENTUSER_MONEY,money);
+        } catch (JSONException e) {
+            e.printStackTrace();
+            dialog.dismiss();
+            return;
+        }
+
+    }
+
+    private void saveFriends(JSONArray josnArray) {
+
+        Map<String, User> map = new HashMap<String, User>();
+
+        if (josnArray != null) {
+            for (int i = 0; i < josnArray.length(); i++) {
+                try {
+                    JSONObject json = josnArray.getJSONObject(i);
+                    String hxid = json.getString("hxid");
+                    String fxid = json.getString("fxid");
+                    String nick = json.getString("nick");
+                    String avatar = json.getString("avatar");
+                    String sex = json.getString("sex");
+                    String region = json.getString("region");
+                    String sign = json.getString("sign");
+                    String tel = json.getString("tel");
+
+                    User user = new User(hxid);
+                    user.setFxid(fxid);
+                    user.setBeizhu("");
+                    user.setNick(nick);
+                    user.setRegion(region);
+                    user.setSex(sex);
+                    user.setTel(tel);
+                    user.setSign(sign);
+                    user.setAvatar(avatar);
+                    setUserHearder(hxid, user);
+                    map.put(hxid, user);
+
+                } catch (JSONException e) {
+                    // TODO Auto-generated catch block
+                    e.printStackTrace();
+                }
+
+            }
+        }
+        // 添加user"申请与通知"
+        User newFriends = new User(Constant.NEW_FRIENDS_USERNAME);
+        String strChat = getResources().getString(
+                R.string.Application_and_notify);
+        newFriends.setNick(strChat);
+        newFriends.setBeizhu("");
+        newFriends.setFxid("");
+        newFriends.setHeader("");
+        newFriends.setRegion("");
+        newFriends.setSex("");
+        newFriends.setTel("");
+        newFriends.setSign("");
+        newFriends.setAvatar("");
+        map.put(Constant.NEW_FRIENDS_USERNAME, newFriends);
+        // 添加"群聊"
+        User groupUser = new User(Constant.GROUP_USERNAME);
+        String strGroup = getResources().getString(R.string.group_chat);
+        groupUser.setNick(strGroup);
+        groupUser.setHeader("");
+        groupUser.setNick(strChat);
+        groupUser.setBeizhu("");
+        groupUser.setFxid("");
+        groupUser.setHeader("");
+        groupUser.setRegion("");
+        groupUser.setSex("");
+        groupUser.setTel("");
+        groupUser.setSign("");
+        groupUser.setAvatar("");
+        map.put(Constant.GROUP_USERNAME, groupUser);
+
+        // 存入内存
+        HXSDKHelper.getInstance().setContactList(map);
+        // 存入db
+        UserDao dao = new UserDao(LoginActivity.this);
+        List<User> users = new ArrayList<User>(map.values());
+        dao.saveContactList(users);
+
+        // 获取黑名单列表
+
 //        try {
-//            String hxid = json.getString("hxid");
-//            String fxid = json.getString("fxid");
-//            String nick = json.getString("nick");
-//            String avatar = json.getString("avatar");
-//            String password = json.getString("password");
-//            String sex = json.getString("sex");
-//            String region = json.getString("region");
-//            String sign = json.getString("sign");
-//            String tel = json.getString("tel");
-//            String money  = json.getString("money");
-//            LocalUserInfo.getInstance(LoginActivity.this).setUserInfo(
-//                    "password", password);
-//            LocalUserInfo.getInstance(LoginActivity.this).setUserInfo("hxid",
-//                    hxid);
-//            LocalUserInfo.getInstance(LoginActivity.this).setUserInfo("fxid",
-//                    fxid);
-//            LocalUserInfo.getInstance(LoginActivity.this).setUserInfo("nick",
-//                    nick);
-//            LocalUserInfo.getInstance(LoginActivity.this).setUserInfo("avatar",
-//                    avatar);
-//            LocalUserInfo.getInstance(LoginActivity.this).setUserInfo("sex",
-//                    sex);
-//            LocalUserInfo.getInstance(LoginActivity.this).setUserInfo("region",
-//                    region);
-//            LocalUserInfo.getInstance(LoginActivity.this).setUserInfo("sign",
-//                    sign);
-//            LocalUserInfo.getInstance(LoginActivity.this).setUserInfo("tel",
-//                    tel);
-//            LocalUserInfo.getInstance(LoginActivity.this).setUserInfo("money",
-//                    money);
-//        } catch (JSONException e) {
-//            e.printStackTrace();
-//            dialog.dismiss();
-//            return;
-//        }
-//
-//    }
+//            List<String> blackList = EMContactManager.getInstance()
+//                    .getBlackListUsernamesFromServer();
+//            EMContactManager.getInstance().saveBlackList(blackList);
 
-//    private void saveFriends(JSONArray josnArray) {
-//
-//        Map<String, User> map = new HashMap<String, User>();
-//
-//        if (josnArray != null) {
-//            for (int i = 0; i < josnArray.size(); i++) {
-//                JSONObject json = josnArray.getJSONObject(i);
-//                try {
-//                    String hxid = json.getString("hxid");
-//                    String fxid = json.getString("fxid");
-//                    String nick = json.getString("nick");
-//                    String avatar = json.getString("avatar");
-//                    String sex = json.getString("sex");
-//                    String region = json.getString("region");
-//                    String sign = json.getString("sign");
-//                    String tel = json.getString("tel");
-//
-//                    User user = new User();
-//                    user.setFxid(fxid);
-//                    user.setUsername(hxid);
-//                    user.setBeizhu("");
-//                    user.setNick(nick);
-//                    user.setRegion(region);
-//                    user.setSex(sex);
-//                    user.setTel(tel);
-//                    user.setSign(sign);
-//                    user.setAvatar(avatar);
-//                    setUserHearder(hxid, user);
-//                    map.put(hxid, user);
-//
-//                } catch (JSONException e) {
-//                    // TODO Auto-generated catch block
-//                    e.printStackTrace();
-//                }
-//
-//            }
-//        }
-//        // 添加user"申请与通知"
-//        User newFriends = new User();
-//        newFriends.setUsername(Constant.NEW_FRIENDS_USERNAME);
-//        String strChat = getResources().getString(
-//                R.string.Application_and_notify);
-//        newFriends.setNick(strChat);
-//        newFriends.setBeizhu("");
-//        newFriends.setFxid("");
-//        newFriends.setHeader("");
-//        newFriends.setRegion("");
-//        newFriends.setSex("");
-//        newFriends.setTel("");
-//        newFriends.setSign("");
-//        newFriends.setAvatar("");
-//        map.put(Constant.NEW_FRIENDS_USERNAME, newFriends);
-//        // 添加"群聊"
-//        User groupUser = new User();
-//        String strGroup = getResources().getString(R.string.group_chat);
-//        groupUser.setUsername(Constant.GROUP_USERNAME);
-//        groupUser.setNick(strGroup);
-//        groupUser.setHeader("");
-//        groupUser.setNick(strChat);
-//        groupUser.setBeizhu("");
-//        groupUser.setFxid("");
-//        groupUser.setHeader("");
-//        groupUser.setRegion("");
-//        groupUser.setSex("");
-//        groupUser.setTel("");
-//        groupUser.setSign("");
-//        groupUser.setAvatar("");
-//        map.put(Constant.GROUP_USERNAME, groupUser);
-//
-//        // 存入内存
-//        MYApplication.getInstance().setContactList(map);
-//        // 存入db
-//        UserDao dao = new UserDao(LoginActivity.this);
-//        List<User> users = new ArrayList<User>(map.values());
-//        dao.saveContactList(users);
-//
-//        // 获取黑名单列表
-//
-////        try {
-////            List<String> blackList = EMContactManager.getInstance()
-////                    .getBlackListUsernamesFromServer();
-////            EMContactManager.getInstance().saveBlackList(blackList);
-//
-//        // 获取群聊列表(群聊里只有groupid和groupname等简单信息，不包含members),sdk会把群组存入到内存和db中
-//        getGroups() ;
-//        //       addContact("11223354");
-//        if (!LoginActivity.this.isFinishing())
-//            dialog.dismiss();
-//        // 进入主页面
-//        startActivity(new Intent(LoginActivity.this, MainActivity.class));
-//        finish();
-//
-//
-//    }
-//    private void getGroups() {
-//
-//        new Thread(new Runnable() {
-//
-//            @Override
-//            public void run() {
-//                try {
-//                    EMGroupManager.getInstance().getGroupsFromServer();
-//                } catch (EaseMobException e) {
-//                    // TODO Auto-generated catch block
-//                    e.printStackTrace();
-//                }
-//            }
-//
-//        }).start();
-//    }
+        // 获取群聊列表(群聊里只有groupid和groupname等简单信息，不包含members),sdk会把群组存入到内存和db中
+        getGroups() ;
+        //       addContact("11223354");
+        if (!LoginActivity.this.isFinishing())
+            dialog.dismiss();
+        // 进入主页面
+        startActivity(new Intent(LoginActivity.this, MainActivity.class));
+        finish();
+
+
+    }
+    private void getGroups() {
+
+        new Thread(new Runnable() {
+
+            @Override
+            public void run() {
+
+                try {
+                    EMClient.getInstance().groupManager().getJoinedGroupsFromServer();
+                } catch (HyphenateException e) {
+                    e.printStackTrace();
+                }
+
+            }
+
+        }).start();
+    }
     /**
      * 添加contact
      *

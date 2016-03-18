@@ -31,6 +31,13 @@ public class PreferenceManager {
     private static String SHARED_KEY_CURRENTUSER_USERNAME = "SHARED_KEY_CURRENTUSER_USERNAME";
     private static String SHARED_KEY_CURRENTUSER_NICK = "SHARED_KEY_CURRENTUSER_NICK";
     private static String SHARED_KEY_CURRENTUSER_AVATAR = "SHARED_KEY_CURRENTUSER_AVATAR";
+    public static String SHARED_KEY_CURRENTUSER_FXID = "SHARED_KEY_CURRENTUSER_FXID";
+    public static String SHARED_KEY_CURRENTUSER_PASSWORD = "SHARED_KEY_CURRENTUSER_PASSWORD";
+    public static String SHARED_KEY_CURRENTUSER_SEX = "SHARED_KEY_CURRENTUSER_SEX";
+    public static String SHARED_KEY_CURRENTUSER_REGION = "SHARED_KEY_CURRENTUSER_REGION";
+    public static String SHARED_KEY_CURRENTUSER_SIGN = "SHARED_KEY_CURRENTUSER_SIGN";
+    public static String SHARED_KEY_CURRENTUSER_TEL = "SHARED_KEY_CURRENTUSER_TEL";
+    public static String SHARED_KEY_CURRENTUSER_MONEY = "SHARED_KEY_CURRENTUSER_MONEY";
 
     private PreferenceManager(Context cxt) {
         mSharedPreferences = cxt.getSharedPreferences(PREFERENCE_NAME, Context.MODE_PRIVATE);
@@ -46,7 +53,6 @@ public class PreferenceManager {
     /**
      * 单例模式，获取instance实例
      *
-     * @param cxt
      * @return
      */
     public synchronized static PreferenceManager getInstance() {
@@ -174,6 +180,16 @@ public class PreferenceManager {
     public String getCurrentUsername(){
         return mSharedPreferences.getString(SHARED_KEY_CURRENTUSER_USERNAME, null);
     }
+
+    public static void setString(String key, String value) {
+        editor.putString(key, value);
+        editor.commit();
+    }
+
+    public static String getString(String key, String defaultValue) {
+        return mSharedPreferences.getString(key, null);
+    }
+
 
 
     public void removeCurrentUserInfo() {
