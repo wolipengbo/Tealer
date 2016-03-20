@@ -25,9 +25,20 @@ import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.hyphenate.EMError;
+import com.hyphenate.chat.EMClient;
+import com.hyphenate.exceptions.HyphenateException;
+import com.tealer.app.HXSDKHelper;
 import com.tealer.app.R;
 import com.tealer.app.activity.BaseActivity;
+import com.tealer.app.engine.LoginEngine;
+import com.tealer.app.engine.RegisterTelEngine;
+import com.tealer.app.http.HttpRequestCallBack;
+import com.tealer.app.utils.EncodeUtils;
 
+import org.json.JSONException;
+import org.json.JSONObject;
+import org.xutils.common.Callback;
 import org.xutils.view.annotation.ContentView;
 import org.xutils.view.annotation.ViewInject;
 
@@ -140,7 +151,7 @@ public class RegisterActivity extends BaseActivity{
                 String usernick = et_usernick.getText().toString().trim();
                 final String password = et_password.getText().toString().trim();
                 String usertel = et_usertel.getText().toString().trim();
-                Map<String, String> map = new HashMap<String, String>();
+                Map<String, Object> map = new HashMap<String, Object>();
                 if ((new File("/sdcard/fanxin/" + imageName)).exists()) {
                     map.put("file", "/sdcard/fanxin/" + imageName);
                     map.put("image", imageName);
@@ -151,16 +162,19 @@ public class RegisterActivity extends BaseActivity{
                 map.put("usernick", usernick);
                 map.put("usertel", usertel);
                 map.put("password", password);
-                LoadDataFromServer registerTask = new LoadDataFromServer(
-                        RegisterActivity.this, Constant.URL_Register_Tel, map);
-
-                registerTask.getData(new DataCallBack() {
-
-                    @SuppressLint("ShowToast")
+                RegisterTelEngine.getResult(new HttpRequestCallBack() {
                     @Override
-                    public void onDataCallBack(JSONObject data) {
+                    public void onStarted() {
+                        super.onStarted();
+                    }
+
+                    @Override
+                    public void onSuccess(String result) {
+                        super.onSuccess(result);
+                        String strJson = EncodeUtils.removeBOM(result);
+                        JSONObject data = LoginEngine.parseResult(strJson, RegisterActivity.this);
                         try {
-                            int code = data.getInteger("code");
+                            int code = data.getInt("code");
                             if (code == 1) {
                                 String hxid = data.getString("hxid");
                                 register(hxid, password);
@@ -196,14 +210,22 @@ public class RegisterActivity extends BaseActivity{
                                     Toast.LENGTH_SHORT).show();
                             e.printStackTrace();
                         }
+                    }
+
+                    @Override
+                    public void onError(Throwable ex, boolean isOnCallback) {
+                        super.onError(ex, isOnCallback);
 
                     }
 
-                });
+                    @Override
+                    public void onCancelled(CancelledException cex) {
+                        super.onCancelled(cex);
+                    }
+                }, map, RegisterActivity.this);
             }
 
         });
-
     }
 
     // 拍照部分
@@ -355,7 +377,6 @@ public class RegisterActivity extends BaseActivity{
     /**
      * 注册
      *
-     * @param view
      */
     public void register(final String hxid, final String password) {
         // String st1 = getResources().getString(
@@ -379,50 +400,44 @@ public class RegisterActivity extends BaseActivity{
                     R.string.registration_failed_without_permission);
             final String st10 = getResources().getString(
                     R.string.Registration_failed);
+
             new Thread(new Runnable() {
                 public void run() {
                     try {
                         // 调用sdk注册方法
-                        EMChatManager.getInstance().createAccountOnServer(hxid,
-                                password);
+                        EMClient.getInstance().createAccount(hxid, password);
                         runOnUiThread(new Runnable() {
                             public void run() {
                                 if (!RegisterActivity.this.isFinishing())
                                     dialog.dismiss();
                                 // 保存用户名
-                                MYApplication.getInstance().setUserName(hxid);
-
-                                Toast.makeText(getApplicationContext(), st6, 0)
-                                        .show();
+                                HXSDKHelper.getInstance().setCurrentUserName(hxid);
+                                Toast.makeText(getApplicationContext(), getResources().getString(R.string.Registered_successfully), 0).show();
                                 finish();
                             }
                         });
-                    } catch (final EaseMobException e) {
+                    } catch (final HyphenateException e) {
                         runOnUiThread(new Runnable() {
                             public void run() {
                                 if (!RegisterActivity.this.isFinishing())
                                     dialog.dismiss();
-                                int errorCode = e.getErrorCode();
-                                if (errorCode == EMError.NONETWORK_ERROR) {
-                                    Toast.makeText(getApplicationContext(),
-                                            st7, Toast.LENGTH_SHORT).show();
-                                } else if (errorCode == EMError.USER_ALREADY_EXISTS) {
-                                    Toast.makeText(getApplicationContext(),
-                                            st8, Toast.LENGTH_SHORT).show();
-                                } else if (errorCode == EMError.UNAUTHORIZED) {
-                                    Toast.makeText(getApplicationContext(),
-                                            st9, Toast.LENGTH_SHORT).show();
-                                } else {
-                                    Toast.makeText(getApplicationContext(),
-                                            st10 + e.getMessage(),
-                                            Toast.LENGTH_SHORT).show();
+                                int errorCode=e.getErrorCode();
+                                if(errorCode== EMError.NETWORK_ERROR){
+                                    Toast.makeText(getApplicationContext(), getResources().getString(R.string.network_anomalies), Toast.LENGTH_SHORT).show();
+                                }else if(errorCode == EMError.USER_ALREADY_EXIST){
+                                    Toast.makeText(getApplicationContext(), getResources().getString(R.string.User_already_exists), Toast.LENGTH_SHORT).show();
+                                }else if(errorCode == EMError.USER_AUTHENTICATION_FAILED){
+                                    Toast.makeText(getApplicationContext(), getResources().getString(R.string.registration_failed_without_permission), Toast.LENGTH_SHORT).show();
+                                }else if(errorCode == EMError.USER_ILLEGAL_ARGUMENT){
+                                    Toast.makeText(getApplicationContext(), getResources().getString(R.string.illegal_user_name),Toast.LENGTH_SHORT).show();
+                                }else{
+                                    Toast.makeText(getApplicationContext(), getResources().getString(R.string.Registration_failed) + e.getMessage(), Toast.LENGTH_SHORT).show();
                                 }
                             }
                         });
                     }
                 }
             }).start();
-
         }
     }
 
