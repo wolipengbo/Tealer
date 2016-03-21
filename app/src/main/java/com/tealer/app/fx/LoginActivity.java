@@ -499,8 +499,6 @@ public class LoginActivity extends BaseActivity {
         // 进入主页面
         startActivity(new Intent(LoginActivity.this, MainActivity.class));
         finish();
-
-
     }
     private void getGroups() {
 
