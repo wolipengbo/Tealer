@@ -1,6 +1,9 @@
 package com.tealer.app.fx;
 import com.tealer.app.Constant;
 import com.tealer.app.activity.BaseActivity;
+import com.tealer.app.db.InviteMessgeDao;
+import com.tealer.app.db.UserDao;
+
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;

@@ -5,6 +5,8 @@ import android.content.SharedPreferences;
 
 import com.tealer.app.db.UserDao;
 import com.tealer.app.domain.User;
+import com.tealer.app.fx.others.TopUser;
+import com.tealer.app.fx.others.TopUserDao;
 import com.tealer.app.utils.PreferenceManager;
 
 import java.util.HashMap;
@@ -40,6 +42,21 @@ public class HXSDKModel {
         UserDao dao = new UserDao(context);
         dao.saveContact(user);
     }
+
+    public Map<String, TopUser> getTopUserList() {
+        // TODO Auto-generated method stub
+        TopUserDao dao = new TopUserDao(context);
+        return dao.getTopUserList();
+    }
+    public boolean saveTopUserList(List<TopUser> contactList) {
+        // TODO Auto-generated method stub
+        TopUserDao dao = new TopUserDao(context);
+        dao.saveTopUserList(contactList);
+        return true;
+    }
+
+
+
 
     /**
      * 设置当前用户的环信id

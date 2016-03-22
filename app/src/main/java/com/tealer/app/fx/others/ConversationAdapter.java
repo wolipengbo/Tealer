@@ -31,6 +31,8 @@ import com.tealer.app.R;
 import com.tealer.app.db.InviteMessgeDao;
 import com.tealer.app.domain.User;
 import com.tealer.app.fx.MainActivity;
+import com.tealer.app.utils.BitmapDisplayConfigHelper;
+import com.tealer.app.utils.ImageLoaderHelper;
 import com.tealer.app.utils.SmileUtils;
 
 import java.util.Date;
@@ -43,12 +45,11 @@ import java.util.Map;
  * @date 2016/3/21
  * @intro 简介
  */
-public class ConversationAdapter extends BaseAdapter {
+public class ConversationAdapter extends BaseImageListAdapter {
 
     private List<EMConversation> normal_list;
     private List<EMConversation> top_list;
     private LayoutInflater inflater;
-    private LoadUserAvatar avatarLoader;
     private Context context;
     Map<String, TopUser> topMap;
 
@@ -61,7 +62,6 @@ public class ConversationAdapter extends BaseAdapter {
         this.normal_list = normal_list;
         this.top_list = top_list;
         inflater = LayoutInflater.from(context);
-        avatarLoader = new LoadUserAvatar(context, "/sdcard/fanxin/");
     }
 
     @Override
@@ -433,21 +433,10 @@ public class ConversationAdapter extends BaseAdapter {
         final String url_avatar = Constant.URL_Avatar + avatar;
         iamgeView.setTag(url_avatar);
         if (url_avatar != null && !url_avatar.equals("")) {
-            Bitmap bitmap = avatarLoader.loadImage(iamgeView, url_avatar,
-                    new ImageDownloadedCallBack() {
-
-                        public void onImageDownloaded(ImageView imageView,
-                                                      Bitmap bitmap) {
-                            if (imageView.getTag() == url_avatar) {
-                                imageView.setImageBitmap(bitmap);
-
-                            }
-                        }
-
-                    });
-            if (bitmap != null)
-                iamgeView.setImageBitmap(bitmap);
-
+            ImageLoaderHelper.GetInstance().display(iamgeView,
+                    url_avatar,
+                    BitmapDisplayConfigHelper.GetInstance().getIconBitmapUtilsConfig(),
+                    new BaseImageListAdapter.IconBitmapLoadCallBack(url_avatar));
         }
     }
 

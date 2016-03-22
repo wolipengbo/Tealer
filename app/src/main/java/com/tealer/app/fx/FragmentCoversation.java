@@ -9,8 +9,14 @@ import android.widget.ListView;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
 
+import com.hyphenate.chat.EMClient;
 import com.hyphenate.chat.EMConversation;
+import com.hyphenate.chat.EMMessage;
+import com.tealer.app.Constant;
+import com.tealer.app.HXSDKHelper;
 import com.tealer.app.R;
+import com.tealer.app.TealerApplication;
+import com.tealer.app.fx.others.ConversationAdapter;
 import com.tealer.app.fx.others.TopUser;
 
 import java.util.ArrayList;
@@ -52,7 +58,7 @@ public class FragmentCoversation extends Fragment {
         errorItem = (RelativeLayout) getView().findViewById(R.id.rl_error_item);
         errorText = (TextView) errorItem.findViewById(R.id.tv_connect_errormsg);
 
-        topMap = MYApplication.getInstance().getTopUserList();
+        topMap = HXSDKHelper.getInstance().getTopUserList();
         normal_list.addAll(loadConversationsWithRecentChat());
         listView = (ListView) getView().findViewById(R.id.list);
         adapter = new ConversationAdapter(getActivity(), normal_list, top_list,topMap);
@@ -80,14 +86,10 @@ public class FragmentCoversation extends Fragment {
      */
     private List<EMConversation> loadConversationsWithRecentChat() {
         // 获取所有会话，包括陌生人
-        Hashtable<String, EMConversation> conversations = EMChatManager
-                .getInstance().getAllConversations();
-
+        Map<String, EMConversation> conversations= EMClient.getInstance().chatManager().getAllConversations();
         List<EMConversation> list = new ArrayList<EMConversation>();
         List<EMConversation> topList1 = new ArrayList<EMConversation>();
-
         // 置顶列表再刷新一次
-
         // 过滤掉messages seize为0的conversation
         for (EMConversation conversation : conversations.values()) {
 
@@ -113,7 +115,6 @@ public class FragmentCoversation extends Fragment {
     /**
      * 根据最后一条消息的时间排序
      *
-     * @param usernames
      */
     private void sortConversationByLastChatTime(
             List<EMConversation> conversationList) {

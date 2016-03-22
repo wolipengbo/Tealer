@@ -29,6 +29,7 @@ import com.tealer.app.db.InviteMessgeDao;
 import com.tealer.app.db.UserDao;
 import com.tealer.app.domain.InviteMessage;
 import com.tealer.app.domain.User;
+import com.tealer.app.fx.others.TopUser;
 import com.tealer.app.receiver.CallReceiver;
 import com.tealer.app.utils.PreferenceManager;
 import java.util.ArrayList;
@@ -62,7 +63,7 @@ public class HXSDKHelper {
 
     private Map<String, User> contactList;
 
-
+    private Map<String,TopUser> topUserList;
 
     private static HXSDKHelper instance = null;
 
@@ -734,6 +735,26 @@ public class HXSDKHelper {
 
         return contactList;
     }
+
+
+    /**
+     * 获取内存中置顶好友 t
+     *
+     * @return
+     */
+    public Map<String, TopUser> getTopUserList() {
+        if (isLoggedIn() && topUserList == null) {
+            topUserList = hxModel.getTopUserList();
+        }
+        return topUserList;
+    }
+
+
+
+
+
+
+
 
     /**
      * 设置当前用户的环信id
