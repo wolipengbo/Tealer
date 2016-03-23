@@ -42,7 +42,13 @@ import com.tealer.app.Constant;
 import com.tealer.app.R;
 import com.tealer.app.fx.ChatActivity;
 import com.tealer.app.fx.others.BaseImageListAdapter;
+import com.tealer.app.task.LoadImageTask;
+import com.tealer.app.task.LoadVideoImageTask;
+import com.tealer.app.utils.BitmapDisplayConfigHelper;
+import com.tealer.app.utils.ImageCache;
+import com.tealer.app.utils.ImageLoaderHelper;
 import com.tealer.app.utils.ImageUtils;
+import com.tealer.app.utils.PreferenceManager;
 import com.tealer.app.utils.SmileUtils;
 
 import java.io.File;
@@ -636,26 +642,7 @@ public class MessageAdapter extends BaseImageListAdapter {
                 holder.head_iv.setTag(avater);
 
                 if (avater != null && !avater.equals("")) {
-                    Bitmap bitmap = avatarLoader.loadImage(holder.head_iv,
-                            avater, new ImageDownloadedCallBack() {
-
-                                @Override
-                                public void onImageDownloaded(
-                                        ImageView imageView, Bitmap bitmap) {
-                                    if (imageView.getTag() == avater) {
-                                        imageView.setImageBitmap(bitmap);
-
-                                    }
-                                }
-
-                            });
-
-                    if (bitmap != null) {
-
-                        holder.head_iv.setImageBitmap(bitmap);
-
-                    }
-
+                    ImageLoaderHelper.GetInstance().display(holder.head_iv,avater, BitmapDisplayConfigHelper.GetInstance().getIconBitmapUtilsConfig());
                 }
 
             } else {
@@ -663,34 +650,13 @@ public class MessageAdapter extends BaseImageListAdapter {
                 // 设置自己本地的头像
 
                 final String avater = Constant.URL_Avatar
-                        + LocalUserInfo.getInstance(context).getUserInfo(
-                        "avatar");
+                        + PreferenceManager.getInstance().getCurrentUserAvatar();
 
                 holder.head_iv.setTag(avater);
 
                 if (avater != null && !avater.equals("")) {
-                    Bitmap bitmap = avatarLoader.loadImage(holder.head_iv,
-                            avater, new ImageDownloadedCallBack() {
-
-                                @Override
-                                public void onImageDownloaded(
-                                        ImageView imageView, Bitmap bitmap) {
-                                    if (imageView.getTag() == avater) {
-                                        imageView.setImageBitmap(bitmap);
-
-                                    }
-                                }
-
-                            });
-
-                    if (bitmap != null) {
-
-                        holder.head_iv.setImageBitmap(bitmap);
-
-                    }
-
+                    ImageLoaderHelper.GetInstance().display(holder.head_iv,avater, BitmapDisplayConfigHelper.GetInstance().getIconBitmapUtilsConfig());
                 }
-
             }
         }
         return convertView;
@@ -913,8 +879,8 @@ public class MessageAdapter extends BaseImageListAdapter {
             showVideoThumbView(localThumb, holder.iv,
                     videoBody.getThumbnailUrl(), message);
         }
-        if (videoBody.getLength() > 0) {
-            String time = DateUtils.toTimeBySecond(videoBody.getLength());
+        if (videoBody.getDuration() > 0) {
+            String time = DateUtils.toTimeBySecond(videoBody.getDuration());
             holder.timeLength.setText(time);
         }
         holder.playBtn.setImageResource(R.drawable.video_download_btn_nor);
@@ -1001,7 +967,7 @@ public class MessageAdapter extends BaseImageListAdapter {
                                             activity.getString(R.string.send_fail)
                                                     + activity
                                                     .getString(R.string.connect_failuer_toast),
-                                            0).show();
+                                            Toast.LENGTH_SHORT).show();
                                     timer.cancel();
                                 }
 
@@ -1073,39 +1039,37 @@ public class MessageAdapter extends BaseImageListAdapter {
             if (message.status() == EMMessage.Status.INPROGRESS) {
                 holder.pb.setVisibility(View.VISIBLE);
                 System.err.println("!!!! back receive");
-                ((EMFileMessageBody) message.getBody())
-                        .setDownloadCallback(new EMCallBack() {
+
+                message.setMessageStatusCallback(new EMCallBack() {
+                    @Override
+                    public void onSuccess() {
+                        activity.runOnUiThread(new Runnable() {
 
                             @Override
-                            public void onSuccess() {
-                                activity.runOnUiThread(new Runnable() {
-
-                                    @Override
-                                    public void run() {
-                                        holder.pb.setVisibility(View.INVISIBLE);
-                                        notifyDataSetChanged();
-                                    }
-                                });
-
-                            }
-
-                            @Override
-                            public void onProgress(int progress, String status) {
-                            }
-
-                            @Override
-                            public void onError(int code, String message) {
-                                activity.runOnUiThread(new Runnable() {
-
-                                    @Override
-                                    public void run() {
-                                        holder.pb.setVisibility(View.INVISIBLE);
-                                    }
-                                });
-
+                            public void run() {
+                                holder.pb.setVisibility(View.INVISIBLE);
+                                notifyDataSetChanged();
                             }
                         });
+                    }
 
+                    @Override
+                    public void onError(int i, String s) {
+                        activity.runOnUiThread(new Runnable() {
+
+                            @Override
+                            public void run() {
+                                holder.pb.setVisibility(View.INVISIBLE);
+                                notifyDataSetChanged();
+                            }
+                        });
+                    }
+
+                    @Override
+                    public void onProgress(int i, String s) {
+
+                    }
+                });
             } else {
                 holder.pb.setVisibility(View.INVISIBLE);
 
@@ -1307,11 +1271,7 @@ public class MessageAdapter extends BaseImageListAdapter {
 
         final long start = System.currentTimeMillis();
         // 调用sdk发送异步发送方法
-
-
-
-        EMChatManager.getInstance().sendMessage(message, new EMCallBack() {
-
+        message.setMessageStatusCallback(new EMCallBack() {
             @Override
             public void onSuccess() {
                 // umeng自定义事件，
@@ -1320,16 +1280,18 @@ public class MessageAdapter extends BaseImageListAdapter {
             }
 
             @Override
-            public void onError(int code, String error) {
-
+            public void onError(int i, String s) {
                 updateSendedView(message, holder);
             }
 
             @Override
-            public void onProgress(int progress, String status) {
-            }
+            public void onProgress(int i, String s) {
 
+            }
         });
+       EMClient.getInstance().chatManager().sendMessage(message);
+
+
 
     }
 
@@ -1347,9 +1309,7 @@ public class MessageAdapter extends BaseImageListAdapter {
             holder.pb.setVisibility(View.VISIBLE);
         if (holder.tv != null)
             holder.tv.setVisibility(View.VISIBLE);
-
-        msgbody.setDownloadCallback(new EMCallBack() {
-
+        message.setMessageStatusCallback(new EMCallBack() {
             @Override
             public void onSuccess() {
                 activity.runOnUiThread(new Runnable() {
@@ -1366,7 +1326,7 @@ public class MessageAdapter extends BaseImageListAdapter {
             }
 
             @Override
-            public void onError(int code, String message) {
+            public void onError(int i, String s) {
 
             }
 
@@ -1381,9 +1341,7 @@ public class MessageAdapter extends BaseImageListAdapter {
                         }
                     });
                 }
-
             }
-
         });
     }
 
@@ -1402,13 +1360,9 @@ public class MessageAdapter extends BaseImageListAdapter {
             holder.tv.setText("0%");
 
             final long start = System.currentTimeMillis();
-            // if (chatType == ChatActivity.CHATTYPE_SINGLE) {
-            EMChatManager.getInstance().sendMessage(message, new EMCallBack() {
-
+            message.setMessageStatusCallback(new EMCallBack() {
                 @Override
                 public void onSuccess() {
-                    Log.d(TAG, "send image message successfully");
-
                     activity.runOnUiThread(new Runnable() {
                         public void run() {
                             // send success
@@ -1419,8 +1373,7 @@ public class MessageAdapter extends BaseImageListAdapter {
                 }
 
                 @Override
-                public void onError(int code, String error) {
-
+                public void onError(int i, String s) {
                     activity.runOnUiThread(new Runnable() {
                         public void run() {
                             holder.pb.setVisibility(View.GONE);
@@ -1432,21 +1385,22 @@ public class MessageAdapter extends BaseImageListAdapter {
                                     activity.getString(R.string.send_fail)
                                             + activity
                                             .getString(R.string.connect_failuer_toast),
-                                    0).show();
+                                    Toast.LENGTH_SHORT).show();
                         }
                     });
                 }
 
                 @Override
-                public void onProgress(final int progress, String status) {
+                public void onProgress(final int progress, String s) {
                     activity.runOnUiThread(new Runnable() {
                         public void run() {
                             holder.tv.setText(progress + "%");
                         }
                     });
                 }
-
             });
+            EMClient.getInstance().chatManager().sendMessage(message);
+
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -1488,7 +1442,7 @@ public class MessageAdapter extends BaseImageListAdapter {
                             activity.getString(R.string.send_fail)
                                     + activity
                                     .getString(R.string.connect_failuer_toast),
-                            0).show();
+                            Toast.LENGTH_LONG).show();
                 }
 
                 notifyDataSetChanged();
@@ -1534,7 +1488,7 @@ public class MessageAdapter extends BaseImageListAdapter {
                         // ShowBigImage needs to download it from the server
                         // first
                         // intent.putExtra("", message.get);
-                        ImageMessageBody body = (ImageMessageBody) message
+                        EMImageMessageBody body = (EMImageMessageBody) message
                                 .getBody();
                         intent.putExtra("secret", body.getSecret());
                         intent.putExtra("remotepath", remote);
@@ -1600,8 +1554,7 @@ public class MessageAdapter extends BaseImageListAdapter {
                             && message.getChatType() != EMMessage.ChatType.GroupChat) {
                         message.setAcked(true);
                         try {
-                            EMChatManager.getInstance().ackMessageRead(
-                                    message.getFrom(), message.getMsgId());
+                            EMClient.getInstance().chatManager().ackMessageRead(message.getFrom(), message.getMsgId());
                         } catch (Exception e) {
                             e.printStackTrace();
                         }
