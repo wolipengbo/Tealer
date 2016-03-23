@@ -42,7 +42,9 @@ import android.widget.Toast;
 
 import com.hyphenate.chat.EMConversation;
 import com.hyphenate.util.VoiceRecorder;
+import com.tealer.app.R;
 import com.tealer.app.activity.BaseActivity;
+import com.tealer.app.adapter.MessageAdapter;
 import com.tealer.app.widget.PasteEditText;
 
 import java.io.File;
@@ -152,7 +154,7 @@ public class ChatActivity  extends BaseActivity implements View.OnClickListener{
     };
 
     @Override
-    protected void onCreate(Bundle savedInstanceState) {
+    public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_chat);
 

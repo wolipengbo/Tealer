@@ -7,6 +7,7 @@ import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.drawable.AnimationDrawable;
 import android.net.Uri;
+import android.os.Handler;
 import android.text.Spannable;
 import android.util.Log;
 import android.view.LayoutInflater;
@@ -14,22 +15,35 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.ListView;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import com.hyphenate.EMCallBack;
+import com.hyphenate.chat.EMChatManager;
 import com.hyphenate.chat.EMClient;
 import com.hyphenate.chat.EMConversation;
 import com.hyphenate.chat.EMFileMessageBody;
+import com.hyphenate.chat.EMImageMessageBody;
+import com.hyphenate.chat.EMLocationMessageBody;
 import com.hyphenate.chat.EMMessage;
 import com.hyphenate.chat.EMMessage.Type;
+import com.hyphenate.chat.EMNormalFileMessageBody;
+import com.hyphenate.chat.EMTextMessageBody;
+import com.hyphenate.chat.EMVideoMessageBody;
+import com.hyphenate.chat.EMVoiceMessageBody;
 import com.hyphenate.exceptions.HyphenateException;
+import com.hyphenate.util.DateUtils;
+import com.hyphenate.util.FileUtils;
 import com.hyphenate.util.LatLng;
+import com.hyphenate.util.TextFormater;
 import com.tealer.app.Constant;
 import com.tealer.app.R;
 import com.tealer.app.fx.ChatActivity;
 import com.tealer.app.fx.others.BaseImageListAdapter;
+import com.tealer.app.utils.ImageUtils;
+import com.tealer.app.utils.SmileUtils;
 
 import java.io.File;
 import java.util.Date;
@@ -46,6 +60,11 @@ import java.util.TimerTask;
 public class MessageAdapter extends BaseImageListAdapter {
 
     private final static String TAG = "msg";
+
+    private static final int HANDLER_MESSAGE_REFRESH_LIST = 0;
+    private static final int HANDLER_MESSAGE_SELECT_LAST = 1;
+    private static final int HANDLER_MESSAGE_SEEK_TO = 2;
+
     private static final int MESSAGE_TYPE_RECV_TXT = 0;
     private static final int MESSAGE_TYPE_SENT_TXT = 1;
     private static final int MESSAGE_TYPE_SENT_IMAGE = 2;
@@ -66,7 +85,7 @@ public class MessageAdapter extends BaseImageListAdapter {
     public static final String IMAGE_DIR = "chat/image/";
     public static final String VOICE_DIR = "chat/audio/";
     public static final String VIDEO_DIR = "chat/video";
-
+    EMMessage[] messages = null;
     private String username;
     private LayoutInflater inflater;
     private Activity activity;
@@ -75,17 +94,89 @@ public class MessageAdapter extends BaseImageListAdapter {
     private EMConversation conversation;
 
     private Context context;
+    private ListView listView;
 
     private Map<String, Timer> timers = new Hashtable<String, Timer>();
 
-    public MessageAdapter(Context context, String username, int chatType) {
+    public MessageAdapter(Context context, String username, int chatType,ListView listView) {
         this.username = username;
         this.context = context;
         inflater = LayoutInflater.from(context);
+        this.listView=listView;
         activity = (Activity) context;
         this.conversation = EMClient.getInstance().chatManager().getConversation(
                 username);
     }
+
+
+    Handler handler = new Handler() {
+        private void refreshList() {
+            // UI线程不能直接使用conversation.getAllMessages()
+            // 否则在UI刷新过程中，如果收到新的消息，会导致并发问题
+            messages = (EMMessage[]) conversation.getAllMessages().toArray(new EMMessage[0]);
+            conversation.markAllMessagesAsRead();
+            notifyDataSetChanged();
+        }
+
+        @Override
+        public void handleMessage(android.os.Message message) {
+            switch (message.what) {
+                case HANDLER_MESSAGE_REFRESH_LIST:
+                    refreshList();
+                    break;
+                case HANDLER_MESSAGE_SELECT_LAST:
+                    if (messages.length > 0) {
+                        listView.setSelection(messages.length - 1);
+                    }
+                    break;
+                case HANDLER_MESSAGE_SEEK_TO:
+                    int position = message.arg1;
+                    listView.setSelection(position);
+                    break;
+                default:
+                    break;
+            }
+        }
+    };
+
+
+
+
+    /**
+     * 刷新页面
+     */
+    public void refresh() {
+        if (handler.hasMessages(HANDLER_MESSAGE_REFRESH_LIST)) {
+            return;
+        }
+        android.os.Message msg = handler.obtainMessage(HANDLER_MESSAGE_REFRESH_LIST);
+        handler.sendMessage(msg);
+    }
+
+    /**
+     * 刷新页面, 选择最后一个
+     */
+    public void refreshSelectLast() {
+        // avoid refresh too frequently when receiving large amount offline messages
+        final int TIME_DELAY_REFRESH_SELECT_LAST = 100;
+        handler.removeMessages(HANDLER_MESSAGE_REFRESH_LIST);
+        handler.removeMessages(HANDLER_MESSAGE_SELECT_LAST);
+        handler.sendEmptyMessageDelayed(HANDLER_MESSAGE_REFRESH_LIST, TIME_DELAY_REFRESH_SELECT_LAST);
+        handler.sendEmptyMessageDelayed(HANDLER_MESSAGE_SELECT_LAST, TIME_DELAY_REFRESH_SELECT_LAST);
+    }
+
+    /**
+     * 刷新页面, 选择Position
+     */
+    public void refreshSeekTo(int position) {
+        handler.sendMessage(handler.obtainMessage(HANDLER_MESSAGE_REFRESH_LIST));
+        android.os.Message msg = handler.obtainMessage(HANDLER_MESSAGE_SEEK_TO);
+        msg.arg1 = position;
+        handler.sendMessage(msg);
+    }
+
+
+
 
     // public void setUser(String user) {
     // this.user = user;
@@ -95,18 +186,16 @@ public class MessageAdapter extends BaseImageListAdapter {
      * 获取item数
      */
     public int getCount() {
-        return conversation.getAllMessages().size();
+        return messages == null ? 0 : messages.length;
     }
 
-    /**
-     * 刷新页面
-     */
-    public void refresh() {
-        notifyDataSetChanged();
-    }
+
 
     public EMMessage getItem(int position) {
-        return conversation.getMessage(position);
+        if (messages != null && position < messages.length) {
+            return messages[position];
+        }
+        return null;
     }
 
     public long getItemId(int position) {
@@ -117,7 +206,10 @@ public class MessageAdapter extends BaseImageListAdapter {
      * 获取item类型
      */
     public int getItemViewType(int position) {
-        EMMessage message = conversation.getMessage(position);
+        EMMessage message = getItem(position);
+        if (message == null) {
+            return -1;
+        }
         if (message.getType() == EMMessage.Type.TXT) {
             if (message.getBooleanAttribute(
                     Constant.MESSAGE_ATTR_IS_VOICE_CALL, false))
@@ -224,7 +316,7 @@ public class MessageAdapter extends BaseImageListAdapter {
                     .findViewById(R.id.tv_content);
             timestamp.setText(DateUtils.getTimestampString(new Date(message
                     .getMsgTime())));
-            TextMessageBody txtBody = (TextMessageBody) message.getBody();
+            EMTextMessageBody txtBody = (EMTextMessageBody) message.getBody();
             Spannable span = SmileUtils.getSmiledText(context,
                     txtBody.getMessage());
             // 设置内容
@@ -523,8 +615,7 @@ public class MessageAdapter extends BaseImageListAdapter {
                 timestamp.setVisibility(View.VISIBLE);
             } else {
                 // 两条消息时间离得如果稍长，显示时间
-                if (DateUtils.isCloseEnough(message.getMsgTime(), conversation
-                        .getMessage(position - 1).getMsgTime())) {
+                if (DateUtils.isCloseEnough(message.getMsgTime(), messages[position - 1].getMsgTime())) {
                     timestamp.setVisibility(View.GONE);
                 } else {
                     timestamp.setText(DateUtils.getTimestampString(new Date(
@@ -614,7 +705,7 @@ public class MessageAdapter extends BaseImageListAdapter {
      */
     private void handleTextMessage(EMMessage message, ViewHolder holder,
                                    final int position) {
-        TextMessageBody txtBody = (TextMessageBody) message.getBody();
+        EMTextMessageBody txtBody = (EMTextMessageBody) message.getBody();
         Spannable span = SmileUtils
                 .getSmiledText(context, txtBody.getMessage());
         // 设置内容
@@ -661,7 +752,7 @@ public class MessageAdapter extends BaseImageListAdapter {
      */
     private void handleCallMessage(EMMessage message, ViewHolder holder,
                                    final int position) {
-        TextMessageBody txtBody = (TextMessageBody) message.getBody();
+        EMTextMessageBody txtBody = (EMTextMessageBody) message.getBody();
         holder.tv.setText(txtBody.getMessage());
 
     }
@@ -701,7 +792,7 @@ public class MessageAdapter extends BaseImageListAdapter {
                 holder.pb.setVisibility(View.GONE);
                 holder.tv.setVisibility(View.GONE);
                 holder.iv.setImageResource(R.drawable.default_image);
-                ImageMessageBody imgBody = (ImageMessageBody) message.getBody();
+                EMImageMessageBody imgBody = (EMImageMessageBody) message.getBody();
                 if (imgBody.getLocalUrl() != null) {
                     // String filePath = imgBody.getLocalUrl();
                     String remotePath = imgBody.getRemoteUrl();
@@ -719,7 +810,7 @@ public class MessageAdapter extends BaseImageListAdapter {
         // 发送的消息
         // process send message
         // send pic, show the pic directly
-        ImageMessageBody imgBody = (ImageMessageBody) message.getBody();
+        EMImageMessageBody imgBody = (EMImageMessageBody) message.getBody();
         String filePath = imgBody.getLocalUrl();
         if (filePath != null && new File(filePath).exists()) {
             showImageView(ImageUtils.getThumbnailImagePath(filePath),
@@ -800,7 +891,7 @@ public class MessageAdapter extends BaseImageListAdapter {
     private void handleVideoMessage(final EMMessage message,
                                     final ViewHolder holder, final int position, View convertView) {
 
-        VideoMessageBody videoBody = (VideoMessageBody) message.getBody();
+        EMVideoMessageBody videoBody = (EMVideoMessageBody) message.getBody();
         // final File image=new File(PathUtil.getInstance().getVideoPath(),
         // videoBody.getFileName());
         String localThumb = videoBody.getLocalThumb();
@@ -828,7 +919,7 @@ public class MessageAdapter extends BaseImageListAdapter {
         }
         holder.playBtn.setImageResource(R.drawable.video_download_btn_nor);
 
-        if (message.direct == EMMessage.Direct.RECEIVE) {
+        if (message.direct() == EMMessage.Direct.RECEIVE) {
             if (videoBody.getVideoFileLength() > 0) {
                 String size = TextFormater.getDataSize(videoBody
                         .getVideoFileLength());
@@ -843,10 +934,10 @@ public class MessageAdapter extends BaseImageListAdapter {
             }
         }
 
-        if (message.direct == EMMessage.Direct.RECEIVE) {
+        if (message.direct() == EMMessage.Direct.RECEIVE) {
 
             // System.err.println("it is receive msg");
-            if (message.status == EMMessage.Status.INPROGRESS) {
+            if (message.status() == EMMessage.Status.INPROGRESS) {
                 // System.err.println("!!!! back receive");
                 holder.iv.setImageResource(R.drawable.default_image);
                 showDownloadImageProgress(message, holder);
@@ -938,7 +1029,7 @@ public class MessageAdapter extends BaseImageListAdapter {
      */
     private void handleVoiceMessage(final EMMessage message,
                                     final ViewHolder holder, final int position, View convertView) {
-        VoiceMessageBody voiceBody = (VoiceMessageBody) message.getBody();
+        EMVoiceMessageBody voiceBody = (EMVoiceMessageBody) message.getBody();
         holder.tv.setText(voiceBody.getLength() + "\"");
         holder.iv.setOnClickListener(new VoicePlayClickListener(message,
                 holder.iv, holder.iv_read_status, this, activity, username));
@@ -982,7 +1073,7 @@ public class MessageAdapter extends BaseImageListAdapter {
             if (message.status() == EMMessage.Status.INPROGRESS) {
                 holder.pb.setVisibility(View.VISIBLE);
                 System.err.println("!!!! back receive");
-                ((FileMessageBody) message.getBody())
+                ((EMFileMessageBody) message.getBody())
                         .setDownloadCallback(new EMCallBack() {
 
                             @Override
@@ -1051,7 +1142,7 @@ public class MessageAdapter extends BaseImageListAdapter {
      */
     private void handleFileMessage(final EMMessage message,
                                    final ViewHolder holder, int position, View convertView) {
-        final NormalFileMessageBody fileMessageBody = (NormalFileMessageBody) message
+        final EMNormalFileMessageBody fileMessageBody = (EMNormalFileMessageBody) message
                 .getBody();
         final String filePath = fileMessageBody.getLocalUrl();
         holder.tv_file_name.setText(fileMessageBody.getFileName());
@@ -1074,10 +1165,9 @@ public class MessageAdapter extends BaseImageListAdapter {
                 if (message.direct() == EMMessage.Direct.RECEIVE
                         && !message.isAcked()) {
                     try {
-                        EMChatManager.getInstance().ackMessageRead(
-                                message.getFrom(), message.getMsgId());
-                        message.isAcked = true;
-                    } catch (EaseMobException e) {
+                        EMClient.getInstance().chatManager().ackMessageRead(message.getFrom(), message.getMsgId());
+                        message.setAcked(true);
+                    } catch (HyphenateException e) {
                         // TODO Auto-generated catch block
                         e.printStackTrace();
                     }
@@ -1167,7 +1257,7 @@ public class MessageAdapter extends BaseImageListAdapter {
                                        final ViewHolder holder, final int position, View convertView) {
         TextView locationView = ((TextView) convertView
                 .findViewById(R.id.tv_location));
-        LocationMessageBody locBody = (LocationMessageBody) message.getBody();
+        EMLocationMessageBody locBody = (EMLocationMessageBody) message.getBody();
         locationView.setText(locBody.getAddress());
         LatLng loc = new LatLng(locBody.getLatitude(), locBody.getLongitude());
         locationView.setOnClickListener(new MapClickListener(loc, locBody
@@ -1217,6 +1307,9 @@ public class MessageAdapter extends BaseImageListAdapter {
 
         final long start = System.currentTimeMillis();
         // 调用sdk发送异步发送方法
+
+
+
         EMChatManager.getInstance().sendMessage(message, new EMCallBack() {
 
             @Override
@@ -1493,7 +1586,7 @@ public class MessageAdapter extends BaseImageListAdapter {
 
                 @Override
                 public void onClick(View v) {
-                    VideoMessageBody videoBody = (VideoMessageBody) message
+                    EMVideoMessageBody videoBody = (EMVideoMessageBody) message
                             .getBody();
                     System.err.println("video view is on click");
                     Intent intent = new Intent(activity,
