@@ -40,6 +40,10 @@ import com.hyphenate.util.LatLng;
 import com.hyphenate.util.TextFormater;
 import com.tealer.app.Constant;
 import com.tealer.app.R;
+import com.tealer.app.activity.FXAlertDialog;
+import com.tealer.app.activity.ShowBigImage;
+import com.tealer.app.activity.ShowNormalFileActivity;
+import com.tealer.app.activity.ShowVideoActivity;
 import com.tealer.app.fx.ChatActivity;
 import com.tealer.app.fx.others.BaseImageListAdapter;
 import com.tealer.app.task.LoadImageTask;
@@ -1192,7 +1196,7 @@ public class MessageAdapter extends BaseImageListAdapter {
                                             activity.getString(R.string.send_fail)
                                                     + activity
                                                     .getString(R.string.connect_failuer_toast),
-                                            0).show();
+                                            Toast.LENGTH_SHORT).show();
                                     timer.cancel();
                                 }
 
