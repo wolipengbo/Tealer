@@ -40,11 +40,28 @@ import android.widget.RelativeLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.hyphenate.EMError;
+import com.hyphenate.EMGroupChangeListener;
+import com.hyphenate.EMMessageListener;
+import com.hyphenate.chat.EMClient;
 import com.hyphenate.chat.EMConversation;
+import com.hyphenate.chat.EMImageMessageBody;
+import com.hyphenate.chat.EMLocationMessageBody;
+import com.hyphenate.chat.EMMessage;
+import com.hyphenate.chat.EMNormalFileMessageBody;
+import com.hyphenate.chat.EMTextMessageBody;
+import com.hyphenate.chat.EMVideoMessageBody;
+import com.hyphenate.chat.EMVoiceMessageBody;
+import com.hyphenate.exceptions.HyphenateException;
+import com.hyphenate.util.PathUtil;
 import com.hyphenate.util.VoiceRecorder;
+import com.tealer.app.HXSDKHelper;
 import com.tealer.app.R;
+import com.tealer.app.activity.BaiduMapActivity;
 import com.tealer.app.activity.BaseActivity;
+import com.tealer.app.activity.VoiceCallActivity;
 import com.tealer.app.adapter.MessageAdapter;
+import com.tealer.app.adapter.VoicePlayClickListener;
 import com.tealer.app.widget.PasteEditText;
 
 import java.io.File;
@@ -114,7 +131,6 @@ public class ChatActivity  extends BaseActivity implements View.OnClickListener{
     private Drawable[] micImages;
     private int chatType;
     private EMConversation conversation;
-    private NewMessageBroadcastReceiver receiver;
     public static ChatActivity activityInstance = null;
     // 给谁发送消息
     private String toChatUsername;
@@ -159,10 +175,8 @@ public class ChatActivity  extends BaseActivity implements View.OnClickListener{
         setContentView(R.layout.activity_chat);
 
         // 读取本地自己的头像和昵称
-        myUserNick = LocalUserInfo.getInstance(ChatActivity.this).getUserInfo(
-                "nick");
-        myUserAvatar = LocalUserInfo.getInstance(ChatActivity.this)
-                .getUserInfo("avatar");
+        myUserNick = HXSDKHelper.getInstance().getUserProfileManager().getCurrentUserInfo().getNick();
+        myUserAvatar = HXSDKHelper.getInstance().getUserProfileManager().getCurrentUserInfo().getAvatar();
         initView();
         setUpView();
         iamge_path = this.getIntent().getStringExtra("iamge_path");
@@ -321,11 +335,10 @@ public class ChatActivity  extends BaseActivity implements View.OnClickListener{
             String groupName = getIntent().getStringExtra("groupName");
             ((TextView) findViewById(R.id.name)).setText(groupName);
         }
-        conversation = EMChatManager.getInstance().getConversation(
-                toChatUsername);
+        conversation = EMClient.getInstance().chatManager().getConversation(toChatUsername);
         // 把此会话的未读数置为0
-        conversation.resetUnreadMsgCount();
-        adapter = new MessageAdapter(this, toChatUsername, chatType);
+        conversation.markAllMessagesAsRead();
+        adapter = new MessageAdapter(this, toChatUsername, chatType,listView);
         // 显示消息
         listView.setAdapter(adapter);
         listView.setOnScrollListener(new ListScrollListener());
@@ -348,32 +361,9 @@ public class ChatActivity  extends BaseActivity implements View.OnClickListener{
                 return false;
             }
         });
-        // 注册接收消息广播
-        receiver = new NewMessageBroadcastReceiver();
-        IntentFilter intentFilter = new IntentFilter(EMChatManager
-                .getInstance().getNewMessageBroadcastAction());
-        // 设置广播的优先级别大于Mainacitivity,这样如果消息来的时候正好在chat页面，直接显示消息，而不是提示消息未读
-        intentFilter.setPriority(5);
-        registerReceiver(receiver, intentFilter);
-
-        // 注册一个ack回执消息的BroadcastReceiver
-        IntentFilter ackMessageIntentFilter = new IntentFilter(EMChatManager
-                .getInstance().getAckMessageBroadcastAction());
-        ackMessageIntentFilter.setPriority(5);
-        registerReceiver(ackMessageReceiver, ackMessageIntentFilter);
-
-        // 注册一个消息送达的BroadcastReceiver
-        IntentFilter deliveryAckMessageIntentFilter = new IntentFilter(
-                EMChatManager.getInstance()
-                        .getDeliveryAckMessageBroadcastAction());
-        deliveryAckMessageIntentFilter.setPriority(5);
-        registerReceiver(deliveryAckMessageReceiver,
-                deliveryAckMessageIntentFilter);
-
         // 监听当前会话的群聊解散被T事件
         groupListener = new GroupListener();
-        EMGroupManager.getInstance().addGroupChangeListener(groupListener);
-
+        EMClient.getInstance().groupManager().addGroupChangeListener(groupListener);
         // show forward message if the message is not null
         String forward_msg_id = getIntent().getStringExtra("forward_msg_id");
         if (forward_msg_id != null) {
@@ -390,7 +380,6 @@ public class ChatActivity  extends BaseActivity implements View.OnClickListener{
                 @Override
                 public void onClick(View v) {
                     // TODO Auto-generated method stub
-
                     startActivity(
 
                             new Intent(ChatActivity.this,
@@ -441,7 +430,7 @@ public class ChatActivity  extends BaseActivity implements View.OnClickListener{
                             .getIntExtra("position", -1)));
                     // clipboard.setText(SmileUtils.getSmiledText(ChatActivity.this,
                     // ((TextMessageBody) copyMsg.getBody()).getMessage()));
-                    clipboard.setText(((TextMessageBody) copyMsg.getBody())
+                    clipboard.setText(((EMTextMessageBody) copyMsg.getBody())
                             .getMessage());
                     break;
                 case RESULT_CODE_DELETE: // 删除消息
@@ -470,7 +459,7 @@ public class ChatActivity  extends BaseActivity implements View.OnClickListener{
         if (resultCode == RESULT_OK) { // 清空消息
             if (requestCode == REQUEST_CODE_EMPTY_HISTORY) {
                 // 清空会话
-                EMChatManager.getInstance().clearConversation(toChatUsername);
+                EMClient.getInstance().chatManager().deleteConversation(toChatUsername, true);
                 adapter.refresh();
             } else if (requestCode == REQUEST_CODE_CAMERA) { // 发送照片
                 if (cameraFile != null && cameraFile.exists())
@@ -491,8 +480,6 @@ public class ChatActivity  extends BaseActivity implements View.OnClickListener{
                     }
                     bitmap = ThumbnailUtils.createVideoThumbnail(videoPath, 3);
                     if (bitmap == null) {
-                        EMLog.d("chatactivity",
-                                "problem load video thumbnail bitmap,use default icon");
                         bitmap = BitmapFactory.decodeResource(getResources(),
                                 R.drawable.app_panel_video_icon);
                     }
@@ -567,7 +554,7 @@ public class ChatActivity  extends BaseActivity implements View.OnClickListener{
                 EMMessage deleteMsg = (EMMessage) adapter.getItem(data
                         .getIntExtra("position", -1));
                 addUserToBlacklist(deleteMsg.getFrom());
-            } else if (conversation.getMsgCount() > 0) {
+            } else if (conversation.getAllMessages().size() > 0) {
                 adapter.refresh();
                 setResult(RESULT_OK);
             } else if (requestCode == REQUEST_CODE_GROUP_DETAIL) {
@@ -617,15 +604,15 @@ public class ChatActivity  extends BaseActivity implements View.OnClickListener{
             // } else if (id == R.id.btn_file) { // 点击文件图标
             // selectFileFromLocal();
         } else if (id == R.id.btn_voice_call) { // 点击语音电话图标
-            if (!EMChatManager.getInstance().isConnected())
-                Toast.makeText(this, "尚未连接服务器,请稍后再试", 0).show();
+            if (!EMClient.getInstance().isConnected())
+                Toast.makeText(this, "尚未连接服务器,请稍后再试", Toast.LENGTH_SHORT).show();
             else
                 startActivity(new Intent(ChatActivity.this,
                         VoiceCallActivity.class).putExtra("username",
                         toChatUsername).putExtra("isComingCall", false));
         } else if (id == R.id.btn_video_call) { // 视频通话
-            if (!EMChatManager.getInstance().isConnected())
-                Toast.makeText(this, "尚未连接服务器,请稍后再试", 0).show();
+            if (!EMClient.getInstance().isConnected())
+                Toast.makeText(this, "尚未连接服务器,请稍后再试", Toast.LENGTH_SHORT).show();
             else
                 startActivity(new Intent(this, VideoCallActivity.class)
                         .putExtra("username", toChatUsername).putExtra(
@@ -644,7 +631,7 @@ public class ChatActivity  extends BaseActivity implements View.OnClickListener{
         }
 
         cameraFile = new File(PathUtil.getInstance().getImagePath(),
-                MYApplication.getInstance().getUserName()
+              HXSDKHelper.getInstance().getCurrentUsernName()
                         + System.currentTimeMillis() + ".jpg");
         cameraFile.getParentFile().mkdirs();
         startActivityForResult(
@@ -693,7 +680,6 @@ public class ChatActivity  extends BaseActivity implements View.OnClickListener{
      *
      * @param content
      *            message content
-     * @param isResend
      *            boolean resend
      */
     private void sendText(String content) {
@@ -702,8 +688,8 @@ public class ChatActivity  extends BaseActivity implements View.OnClickListener{
             EMMessage message = EMMessage.createSendMessage(EMMessage.Type.TXT);
             // 如果是群聊，设置chattype,默认是单聊
             if (chatType == CHATTYPE_GROUP)
-                message.setChatType(ChatType.GroupChat);
-            TextMessageBody txtBody = new TextMessageBody(content);
+                message.setChatType(EMMessage.ChatType.GroupChat);
+            EMTextMessageBody txtBody = new EMTextMessageBody(content);
             // 设置消息body
             message.addBody(txtBody);
             // 设置要发给谁,用户username或者群聊groupid
@@ -713,7 +699,7 @@ public class ChatActivity  extends BaseActivity implements View.OnClickListener{
             message.setAttribute("useravatar", myUserAvatar);
             message.setAttribute("usernick", myUserNick);
             // 把messgage加到conversation中
-            conversation.addMessage(message);
+            conversation.insertMessage(message);
             // 通知adapter有消息变动，adapter会根据加入的这条message显示消息和调用sdk的发送方法
             adapter.refresh();
             listView.setSelection(listView.getCount() - 1);
@@ -743,18 +729,18 @@ public class ChatActivity  extends BaseActivity implements View.OnClickListener{
 
             // 如果是群聊，设置chattype,默认是单聊
             if (chatType == CHATTYPE_GROUP)
-                message.setChatType(ChatType.GroupChat);
+                message.setChatType(EMMessage.ChatType.GroupChat);
             message.setReceipt(toChatUsername);
             message.setAttribute("toUserNick", toUserNick);
             message.setAttribute("toUserAvatar", toUserAvatar);
             message.setAttribute("useravatar", myUserAvatar);
             message.setAttribute("usernick", myUserNick);
             int len = Integer.parseInt(length);
-            VoiceMessageBody body = new VoiceMessageBody(new File(filePath),
+            EMVoiceMessageBody body = new EMVoiceMessageBody(new File(filePath),
                     len);
             message.addBody(body);
 
-            conversation.addMessage(message);
+            conversation.insertMessage(message);
             adapter.refresh();
             listView.setSelection(listView.getCount() - 1);
             setResult(RESULT_OK);
@@ -778,7 +764,7 @@ public class ChatActivity  extends BaseActivity implements View.OnClickListener{
                 .createSendMessage(EMMessage.Type.IMAGE);
         // 如果是群聊，设置chattype,默认是单聊
         if (chatType == CHATTYPE_GROUP)
-            message.setChatType(ChatType.GroupChat);
+            message.setChatType(EMMessage.ChatType.GroupChat);
 
         message.setReceipt(to);
         message.setAttribute("toUserNick", toUserNick);
@@ -788,11 +774,11 @@ public class ChatActivity  extends BaseActivity implements View.OnClickListener{
         if (is_share) {
             message.setAttribute("isShare", "yes");
         }
-        ImageMessageBody body = new ImageMessageBody(new File(filePath));
+        EMImageMessageBody body = new EMImageMessageBody(new File(filePath));
         // 默认超过100k的图片会压缩后发给对方，可以设置成发送原图
         // body.setSendOriginalImage(true);
         message.addBody(body);
-        conversation.addMessage(message);
+        conversation.insertMessage(message);
 
         listView.setAdapter(adapter);
         adapter.refresh();
@@ -815,17 +801,17 @@ public class ChatActivity  extends BaseActivity implements View.OnClickListener{
                     .createSendMessage(EMMessage.Type.VIDEO);
             // 如果是群聊，设置chattype,默认是单聊
             if (chatType == CHATTYPE_GROUP)
-                message.setChatType(ChatType.GroupChat);
+                message.setChatType(EMMessage.ChatType.GroupChat);
             String to = toChatUsername;
             message.setReceipt(to);
             message.setAttribute("toUserNick", toUserNick);
             message.setAttribute("toUserAvatar", toUserAvatar);
             message.setAttribute("useravatar", myUserAvatar);
             message.setAttribute("usernick", myUserNick);
-            VideoMessageBody body = new VideoMessageBody(videoFile, thumbPath,
+            EMVideoMessageBody body = new EMVideoMessageBody(videoFile.getAbsolutePath(), thumbPath,
                     length, videoFile.length());
             message.addBody(body);
-            conversation.addMessage(message);
+            conversation.insertMessage(message);
             listView.setAdapter(adapter);
             adapter.refresh();
             listView.setSelection(listView.getCount() - 1);
@@ -887,8 +873,8 @@ public class ChatActivity  extends BaseActivity implements View.OnClickListener{
                 .createSendMessage(EMMessage.Type.LOCATION);
         // 如果是群聊，设置chattype,默认是单聊
         if (chatType == CHATTYPE_GROUP)
-            message.setChatType(ChatType.GroupChat);
-        LocationMessageBody locBody = new LocationMessageBody(locationAddress,
+            message.setChatType(EMMessage.ChatType.GroupChat);
+        EMLocationMessageBody locBody = new EMLocationMessageBody(locationAddress,
                 latitude, longitude);
         message.addBody(locBody);
         message.setReceipt(toChatUsername);
@@ -896,7 +882,7 @@ public class ChatActivity  extends BaseActivity implements View.OnClickListener{
         message.setAttribute("toUserAvatar", toUserAvatar);
         message.setAttribute("useravatar", myUserAvatar);
         message.setAttribute("usernick", myUserNick);
-        conversation.addMessage(message);
+        conversation.insertMessage(message);
         listView.setAdapter(adapter);
         adapter.notifyDataSetChanged();
         listView.setSelection(listView.getCount() - 1);
@@ -944,18 +930,18 @@ public class ChatActivity  extends BaseActivity implements View.OnClickListener{
         EMMessage message = EMMessage.createSendMessage(EMMessage.Type.FILE);
         // 如果是群聊，设置chattype,默认是单聊
         if (chatType == CHATTYPE_GROUP)
-            message.setChatType(ChatType.GroupChat);
+            message.setChatType(EMMessage.ChatType.GroupChat);
 
         message.setReceipt(toChatUsername);
         // add message body
-        NormalFileMessageBody body = new NormalFileMessageBody(new File(
+        EMNormalFileMessageBody body = new EMNormalFileMessageBody(new File(
                 filePath));
         message.addBody(body);
         message.setAttribute("toUserNick", toUserNick);
         message.setAttribute("toUserAvatar", toUserAvatar);
         message.setAttribute("useravatar", myUserAvatar);
         message.setAttribute("usernick", myUserNick);
-        conversation.addMessage(message);
+        conversation.insertMessage(message);
         listView.setAdapter(adapter);
         adapter.refresh();
         listView.setSelection(listView.getCount() - 1);
@@ -967,9 +953,9 @@ public class ChatActivity  extends BaseActivity implements View.OnClickListener{
      */
     private void resendMessage() {
         EMMessage msg = null;
-        msg = conversation.getMessage(resendPos);
+        msg = conversation.getMessage(resendPos+"",true);
         // msg.setBackSend(true);
-        msg.status = EMMessage.Status.CREATE;
+        msg.setStatus(EMMessage.Status.CREATE);
 
         adapter.refresh();
         listView.setSelection(resendPos);
@@ -1070,246 +1056,6 @@ public class ChatActivity  extends BaseActivity implements View.OnClickListener{
 
     }
 
-    /**
-     * 消息广播接收者
-     *
-     */
-    private class NewMessageBroadcastReceiver extends BroadcastReceiver {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            // 记得把广播给终结掉
-            abortBroadcast();
-
-            String username = intent.getStringExtra("from");
-
-            String msgid = intent.getStringExtra("msgid");
-            // 收到这个广播的时候，message已经在db和内存里了，可以通过id获取mesage对象
-            EMMessage message = EMChatManager.getInstance().getMessage(msgid);
-            // 如果是群聊消息，获取到group id
-            if (message.getChatType() == ChatType.GroupChat) {
-                username = message.getTo();
-            }
-            // 如果是群聊消息，获取到group id
-            // if (message.getChatType() == ChatType.GroupChat) {
-            // username = message.getTo();
-            // String is_admin = message.getFrom();
-            // if (is_admin.equals("admin")) {
-            // try {
-            // String type = message.getStringAttribute("type");
-            // String groupid = message.getStringAttribute("groupid");
-            // if (groupid != null) {
-            // EMGroup emgroup = EMGroupManager.getInstance()
-            // .getGroup(groupid);
-            // if (emgroup == null) {
-            // emgroup = EMGroupManager.getInstance()
-            // .getGroupFromServer(groupid);
-            // if (emgroup != null) {
-            // Log.e("group is ok", "group is ok");
-            // } else {
-            // Log.e("group is not ok", "group is not ok");
-            // }
-            // } else {
-            // Log.e("local group is ok", "local group is ok");
-            // }
-            // }
-            // if (type.equals("creategroup")) {
-            // GluGroup group = new GluGroup();
-            //
-            // String groupname = message
-            // .getStringAttribute("groupname");
-            // // Log.e("groupid--->>>>.", groupid);
-            // // Log.e("groupname--->>>>.", groupname);
-            // group.setGroupId(groupid);
-            // group.setGroupName(groupname);
-            // List<User> memberList = new ArrayList<User>();
-            // String members = message
-            // .getStringAttribute("members");
-            //
-            // // Log.e("members--->>>>.", members);
-            // com.alibaba.fastjson.JSONArray jsonArray =
-            // com.alibaba.fastjson.JSONArray
-            // .parseArray(members);
-            // for (int i = 0; i < jsonArray.size(); i++) {
-            // com.alibaba.fastjson.JSONObject jsonObject = jsonArray
-            // .getJSONObject(i);
-            // String glufineid = jsonObject
-            // .getString("glufineid");
-            // String nickname = jsonObject
-            // .getString("nickname");
-            // String photo_url = jsonObject
-            // .getString("photo_url");
-            // User user = new User();
-            // user.setUsername(glufineid);
-            // user.setNick(nickname);
-            // user.setAvatar(photo_url);
-            // memberList.add(user);
-            // // Log.e("glufineid--->>>>.", glufineid);
-            // // Log.e("nickname--->>>>.", nickname);
-            // // Log.e("photo_url--->>>>.", photo_url);
-            // }
-            // group.setMembers(memberList);
-            // DemoApplication.getInstance().getGroupsList()
-            // .put(groupid, group);
-            // GroupDao dao = new GroupDao(ChatActivity.this);
-            // dao.saveGroup(group);
-            //
-            // } else if (type.equals("add")) {
-            //
-            // String groupname = message
-            // .getStringAttribute("groupname");
-            // String members = message
-            // .getStringAttribute("members");
-            // GluGroup group = DemoApplication.getInstance()
-            // .getGroupsList().get(groupid);
-            // if (group != null) {
-            // group.setGroupId(groupid);
-            // group.setGroupName(groupname);
-            // List<User> memberList = new ArrayList<User>();
-            // com.alibaba.fastjson.JSONArray jsonArray =
-            // com.alibaba.fastjson.JSONArray
-            // .parseArray(members);
-            // for (int i = 0; i < jsonArray.size(); i++) {
-            // com.alibaba.fastjson.JSONObject jsonObject = jsonArray
-            // .getJSONObject(i);
-            // String glufineid = jsonObject
-            // .getString("glufineid");
-            // String nickname = jsonObject
-            // .getString("nickname");
-            // String photo_url = jsonObject
-            // .getString("photo_url");
-            // User user = new User();
-            // user.setUsername(glufineid);
-            // user.setNick(nickname);
-            // user.setAvatar(photo_url);
-            // memberList.add(user);
-            // }
-            // group.getMembers().addAll(memberList);
-            // GroupDao dao = new GroupDao(ChatActivity.this);
-            // dao.saveGroup(group);
-            // }else {
-            // getNewGroup(groupid,message);
-            // abortBroadcast();
-            // return;
-            // }
-            //
-            // } else if (type.equals("del")) {
-            //
-            // String groupname = message
-            // .getStringAttribute("groupname");
-            // String glufineid = message
-            // .getStringAttribute("glufineid");
-            // GluGroup group = DemoApplication.getInstance()
-            // .getGroupsList().get(groupid);
-            // if (group != null) {
-            // group.setGroupName(groupname);
-            // for (User user : group.getMembers()) {
-            // if (user.getUsername().equals(glufineid)) {
-            // group.getMembers().remove(user);
-            //
-            // GroupDao dao = new GroupDao(
-            // ChatActivity.this);
-            // dao.saveGroup(group);
-            // break;
-            // }
-            //
-            // }
-            //
-            // }else {
-            // getNewGroup(groupid,message);
-            // abortBroadcast();
-            // return;
-            // }
-            //
-            //
-            // } else if (type.equals("upchatgroups")) {
-            //
-            // String groupname = message
-            // .getStringAttribute("groupname");
-            // GluGroup group = DemoApplication.getInstance()
-            // .getGroupsList().get(groupid);
-            // if (group != null) {
-            //
-            // group.setGroupName(groupname);
-            // GroupDao dao = new GroupDao(ChatActivity.this);
-            // dao.saveGroup(group);
-            // }else {
-            // getNewGroup(groupid,message);
-            // abortBroadcast();
-            // return;
-            // }
-            //
-            //
-            // }
-            //
-            // } catch (EaseMobException e) {
-            //
-            // e.printStackTrace();
-            //
-            // }
-            // }
-            // }
-            if (!username.equals(toChatUsername)) {
-                // 消息不是发给当前会话，return
-                notifyNewMessage(message);
-                return;
-            }
-
-            // conversation =
-            // EMChatManager.getInstance().getConversation(toChatUsername);
-            // 通知adapter有新消息，更新ui
-            adapter.refresh();
-            listView.setSelection(listView.getCount() - 1);
-
-        }
-    }
-
-    /**
-     * 消息回执BroadcastReceiver
-     */
-    private BroadcastReceiver ackMessageReceiver = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            abortBroadcast();
-
-            String msgid = intent.getStringExtra("msgid");
-            String from = intent.getStringExtra("from");
-            EMConversation conversation = EMChatManager.getInstance()
-                    .getConversation(from);
-            if (conversation != null) {
-                // 把message设为已读
-                EMMessage msg = conversation.getMessage(msgid);
-                if (msg != null) {
-                    msg.isAcked = true;
-                }
-            }
-            adapter.notifyDataSetChanged();
-
-        }
-    };
-
-    /**
-     * 消息送达BroadcastReceiver
-     */
-    private BroadcastReceiver deliveryAckMessageReceiver = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            abortBroadcast();
-
-            String msgid = intent.getStringExtra("msgid");
-            String from = intent.getStringExtra("from");
-            EMConversation conversation = EMChatManager.getInstance()
-                    .getConversation(from);
-            if (conversation != null) {
-                // 把message设为已读
-                EMMessage msg = conversation.getMessage(msgid);
-                if (msg != null) {
-                    msg.isDelivered = true;
-                }
-            }
-
-            adapter.notifyDataSetChanged();
-        }
-    };
     private PowerManager.WakeLock wakeLock;
 
     /**
@@ -1384,7 +1130,7 @@ public class ChatActivity  extends BaseActivity implements View.OnClickListener{
                                         voiceRecorder
                                                 .getVoiceFileName(toChatUsername),
                                         Integer.toString(length), false);
-                            } else if (length == EMError.INVALID_FILE) {
+                            } else if (length == EMError.FILE_INVALID) {
                                 Toast.makeText(getApplicationContext(), "无录音权限",
                                         Toast.LENGTH_SHORT).show();
                             } else {
@@ -1503,31 +1249,14 @@ public class ChatActivity  extends BaseActivity implements View.OnClickListener{
     protected void onDestroy() {
         super.onDestroy();
         activityInstance = null;
-        EMGroupManager.getInstance().removeGroupChangeListener(groupListener);
-        // 注销广播
-        try {
-            unregisterReceiver(receiver);
-            receiver = null;
-        } catch (Exception e) {
-        }
-        try {
-            unregisterReceiver(ackMessageReceiver);
-            ackMessageReceiver = null;
-            unregisterReceiver(deliveryAckMessageReceiver);
-            deliveryAckMessageReceiver = null;
-        } catch (Exception e) {
-        }
+        EMClient.getInstance().groupManager().removeGroupChangeListener(groupListener);
+        EMClient.getInstance().chatManager().removeMessageListener(msgListener);
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        // GluGroup group_temp = DemoApplication.getInstance().getGroupsList()
-        // .get(toChatUsername);
-        // if (group_temp != null)
-        // ((TextView) findViewById(R.id.name)).setText(group_temp
-        // .getGroupName());
-        // adapter.refresh();
+        EMClient.getInstance().chatManager().addMessageListener(msgListener);
     }
 
     @Override
@@ -1562,6 +1291,61 @@ public class ChatActivity  extends BaseActivity implements View.OnClickListener{
         }
     }
 
+
+    EMMessageListener msgListener = new EMMessageListener() {
+
+        @Override
+        public void onMessageReceived(List<EMMessage> messages) {
+
+            for (EMMessage message : messages) {
+                String username = null;
+                // 群组消息
+                if (message.getChatType() == EMMessage.ChatType.GroupChat || message.getChatType() == EMMessage.ChatType.ChatRoom) {
+                    username = message.getTo();
+                } else {
+                    // 单聊消息
+                    username = message.getFrom();
+                }
+
+                // 如果是当前会话的消息，刷新聊天页面
+                if (username.equals(toChatUsername)) {
+                    adapter.refresh();
+                    listView.setSelection(listView.getCount() - 1);
+                } else {
+                    // 消息不是发给当前会话，return
+                    notifyNewMessage(message);
+                    return;
+                }
+            }
+        }
+
+        @Override
+        public void onCmdMessageReceived(List<EMMessage> messages) {
+
+        }
+
+        @Override
+        public void onMessageReadAckReceived(List<EMMessage> messages) {
+            adapter.refresh();
+        }
+
+        @Override
+        public void onMessageDeliveryAckReceived(List<EMMessage> message) {
+            adapter.refresh();
+        }
+
+        @Override
+        public void onMessageChanged(EMMessage message, Object change) {
+            adapter.refresh();
+        }
+    };
+
+
+
+
+
+
+
     /**
      * 加入到黑名单
      *
@@ -1569,11 +1353,10 @@ public class ChatActivity  extends BaseActivity implements View.OnClickListener{
      */
     private void addUserToBlacklist(String username) {
         try {
-            EMContactManager.getInstance().addUserToBlackList(username, false);
+            EMClient.getInstance().contactManager().addUserToBlackList(username, false);
             Toast.makeText(getApplicationContext(), "移入黑名单成功",
                     Toast.LENGTH_SHORT).show();
-        } catch (EaseMobException e) {
-            e.printStackTrace();
+        } catch (HyphenateException e) {
             Toast.makeText(getApplicationContext(), "移入黑名单失败",
                     Toast.LENGTH_SHORT).show();
         }
@@ -1585,21 +1368,7 @@ public class ChatActivity  extends BaseActivity implements View.OnClickListener{
      * @param view
      */
     public void back(View view) {
-        // if(type==3){
-        // startActivity(new
-        // Intent(getApplicationContext(),MyGroupActivity.class));
-        // finish();
-        // }else if(type==2){
-        // startActivity(new
-        // Intent(getApplicationContext(),ContactListActivity.class));
-        // finish();
-        // }else if(type==1){
-        // startActivity(new
-        // Intent(getApplicationContext(),MainActivity.class));
-        // finish();
-        // }else{
         finish();
-        // }
     }
 
     /**
@@ -1612,22 +1381,7 @@ public class ChatActivity  extends BaseActivity implements View.OnClickListener{
             iv_emoticons_normal.setVisibility(View.VISIBLE);
             iv_emoticons_checked.setVisibility(View.INVISIBLE);
         } else {
-            // if(type==3){
-            // startActivity(new
-            // Intent(getApplicationContext(),MyGroupActivity.class));
-            // finish();
-            // }else if(type==2){
-            // startActivity(new
-            // Intent(getApplicationContext(),ContactListActivity.class));
-            // finish();
-            // }else if(type==1){
-            // startActivity(new
-            // Intent(getApplicationContext(),MainActivity.class));
-            // finish();
-            // }else{
             finish();
-            // }
-
             super.onBackPressed();
         }
     }
@@ -1708,19 +1462,18 @@ public class ChatActivity  extends BaseActivity implements View.OnClickListener{
      * @param forward_msg_id
      */
     protected void forwardMessage(String forward_msg_id) {
-        EMMessage forward_msg = EMChatManager.getInstance().getMessage(
-                forward_msg_id);
+        EMMessage forward_msg =EMClient.getInstance().chatManager().getMessage(forward_msg_id);
         EMMessage.Type type = forward_msg.getType();
         switch (type) {
             case TXT:
                 // 获取消息内容，发送消息
-                String content = ((TextMessageBody) forward_msg.getBody())
+                String content = ((EMTextMessageBody) forward_msg.getBody())
                         .getMessage();
                 sendText(content);
                 break;
             case IMAGE:
                 // 发送图片
-                String filePath = ((ImageMessageBody) forward_msg.getBody())
+                String filePath = ((EMImageMessageBody) forward_msg.getBody())
                         .getLocalUrl();
                 if (filePath != null) {
                     File file = new File(filePath);
@@ -1740,7 +1493,42 @@ public class ChatActivity  extends BaseActivity implements View.OnClickListener{
      * 监测群组解散或者被T事件
      *
      */
-    class GroupListener extends GroupReomveListener {
+    class GroupListener implements EMGroupChangeListener {
+
+        @Override
+        public void onInvitationReceived(String s, String s1, String s2, String s3) {
+
+        }
+
+        @Override
+        public void onApplicationReceived(String s, String s1, String s2, String s3) {
+
+        }
+
+        @Override
+        public void onApplicationAccept(String s, String s1, String s2) {
+
+        }
+
+        @Override
+        public void onApplicationDeclined(String s, String s1, String s2, String s3) {
+
+        }
+
+        @Override
+        public void onInvitationAccpted(String s, String s1, String s2) {
+
+        }
+
+        @Override
+        public void onInvitationDeclined(String s, String s1, String s2) {
+
+        }
+
+        @Override
+        public void onAutoAcceptInvitationFromGroup(String s, String s1, String s2) {
+
+        }
 
         @Override
         public void onUserRemoved(final String groupId, String groupName) {
@@ -1749,10 +1537,8 @@ public class ChatActivity  extends BaseActivity implements View.OnClickListener{
                     if (toChatUsername.equals(groupId)) {
                         Toast.makeText(ChatActivity.this, "你被群创建者从此群中移除",
                                 Toast.LENGTH_SHORT).show();
-
-                        EMChatManager.getInstance().deleteConversation(groupId,
+                        EMClient.getInstance().chatManager().deleteConversation(groupId,
                                 false);
-
                         if (ChatRoomSettingActivity.instance != null)
                             ChatRoomSettingActivity.instance.finish();
                         if (ChatSingleSettingActivity.instance != null)

@@ -5,4 +5,26 @@
     <dimen name="height_top_bar">48dp</dimen>
     <dimen name="margin_chat_activity">5dp</dimen>
     <dimen name="size_avatar">50dp</dimen>
+
+    <dimen name="dimens_dp_2">2dp</dimen>
+    <dimen name="dimens_dp_4">4dp</dimen>
+    <dimen name="dimens_dp_6">6dp</dimen>
+    <dimen name="dimens_dp_8">8dp</dimen>
+    <dimen name="dimens_dp_12">12dp</dimen>
+    <dimen name="dimens_dp_16">16dp</dimen>
+    <dimen name="dimens_dp_20">20dp</dimen>
+    <dimen name="dimens_dp_32">32dp</dimen>
+    <dimen name="dimens_dp_64">64dp</dimen>
+    <dimen name="dimens_dp_128">128dp</dimen>
+
+    <dimen name="dimens_sp_10">10sp</dimen>
+    <dimen name="dimens_sp_12">12sp</dimen>
+    <dimen name="dimens_sp_14">14sp</dimen>
+    <dimen name="dimens_sp_16">16sp</dimen>
+    <dimen name="dimens_sp_18">18sp</dimen>
+    <dimen name="dimens_sp_20">20sp</dimen>
+    <dimen name="dimens_sp_22">22sp</dimen>
+    <dimen name="dimens_sp_30">30sp</dimen>
+    <dimen name="refresh_header_view_height">56.33dp</dimen>
+    <dimen name="refresh_header_progress_padding">16dp</dimen> <!-- 下拉刷新到某个位置 开始出现水波纹 -->
 </resources>

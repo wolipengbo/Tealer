@@ -10,4 +10,9 @@
     <color name="btn_gray_pressed_status">#b5b5b6</color>
     <color name="btn_blue_pressed">#0066FF</color>
     <color name="btn_blue_normal">#1e90ff</color>
+    <!-- 页面背景、tab背景、搜索框背景色    灰色 -->
+    <color name="triphare_gray_background_color">#f1f1f1</color>
+    <!-- 主色调    绿色 -->
+    <color name="triphare_green_color">#09c4ca</color>
+    <color name="text_color">#576B95</color>
 </resources>

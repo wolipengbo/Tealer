@@ -4,6 +4,7 @@ import android.graphics.Bitmap;
 import android.view.animation.AlphaAnimation;
 import android.widget.ImageView;
 
+
 import com.tealer.app.R;
 
 import org.xutils.common.util.DensityUtil;

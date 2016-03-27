@@ -40,6 +40,7 @@ import com.hyphenate.util.LatLng;
 import com.hyphenate.util.TextFormater;
 import com.tealer.app.Constant;
 import com.tealer.app.R;
+import com.tealer.app.activity.BaiduMapActivity;
 import com.tealer.app.activity.FXAlertDialog;
 import com.tealer.app.activity.ShowBigImage;
 import com.tealer.app.activity.ShowNormalFileActivity;

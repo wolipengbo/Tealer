@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:wave="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="56.33dp"
+    android:paddingBottom="10dp"
+    android:background="@color/triphare_gray_background_color"  >
+
+    <!--<com.lottoxinyu.views.RoundProgressBar-->
+    <!--android:id="@+id/refresh_header_round_progressbar"-->
+    <!--android:layout_width="24dp"-->
+    <!--android:layout_height="24dp" />-->
+    <!--<ProgressBar-->
+    <!--android:id="@+id/refresh_header_loading_progressbar"-->
+    <!--android:layout_width="24dp"-->
+    <!--android:layout_height="24dp"-->
+    <!--android:indeterminateDrawable="@drawable/frame_loading"-->
+    <!--android:visibility="gone" />-->
+
+    <com.tealer.app.widget.wave.WaveView
+        android:id="@+id/refresh_header_loading_progressbar"
+        android:layout_width="33.33dp"
+        android:layout_height="36.33dp"
+        android:layout_gravity="center_horizontal|bottom"
+        android:background="#cbcbcb"
+        wave:above_wave_color="@color/triphare_green_color"
+        wave:blow_wave_color="@color/triphare_green_color"
+        wave:progress="80"
+        wave:wave_height="little"
+        wave:wave_hz="fast"
+        wave:wave_length="middle" />
+
+    <ImageView
+        android:id="@+id/refresh_header_loading_logo"
+        android:layout_width="33.33dp"
+        android:layout_height="36.33dp"
+        android:layout_gravity="center_horizontal|bottom"
+        android:scaleType="fitXY"
+        android:src="@drawable/loading_logo"/>
+
+    <!--<TextView-->
+    <!--android:id="@+id/refresh_header_loading_text"-->
+    <!--android:layout_width="wrap_content"-->
+    <!--android:layout_height="wrap_content"-->
+    <!--android:textSize="@dimen/dimens_sp_12"-->
+    <!--android:text="刷新成功"-->
+    <!--android:visibility="gone" />-->
+
+</FrameLayout>
